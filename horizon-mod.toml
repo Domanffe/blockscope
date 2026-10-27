@@ -1,7 +1,7 @@
-id = "block_info"
-name = "Block Info"
+id = "blockscope"
+name = "Blockscope"
 version = "0.1.0"
-description = "The block under your crosshair, its name and id beside it. A Jade-style tooltip drawn on the HUD, up to 20 blocks away."
+description = "The block under your crosshair: its name, id and distance, in a box beside the crosshair. A Jade-style tooltip for Horizon."
 authors = ["Domanffe"]
 # The Horizon mod API the SDK targets.
 api = "0.1"

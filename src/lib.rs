@@ -1,4 +1,4 @@
-//! Block Info: what the crosshair is on. `game.raycast` names the block,
+//! Blockscope: what the crosshair is on. `game.raycast` names the block,
 //! `recipes.items` turns its id into the name the player's language uses,
 //! and `render.set-hud` draws a Jade-style box beside the crosshair. The
 //! game draws the box under screens and hides it with F1, like any HUD.
@@ -22,14 +22,14 @@ const LINE: f32 = 10.0;
 const GAP: f32 = 10.0;
 const EDGE: f32 = 2.0;
 
-struct BlockInfo {
+struct Blockscope {
     /// Item id to its name in the player's language, read once in a world.
     names: HashMap<String, String>,
     /// The two lines drawn now; `None` when the box is hidden.
     shown: Option<(String, String)>,
 }
 
-impl BlockInfo {
+impl Blockscope {
     /// The item table carries every block's name, in the player's language.
     /// It is read on the first tick in a world: there is no registry on the
     /// title screen.
@@ -124,10 +124,10 @@ fn pretty(id: &str) -> String {
     out
 }
 
-impl Mod for BlockInfo {
+impl Mod for Blockscope {
     fn init() -> Result<(Self, Registration), String> {
         Ok((
-            BlockInfo {
+            Blockscope {
                 names: HashMap::new(),
                 shown: None,
             },
@@ -141,7 +141,7 @@ impl Mod for BlockInfo {
     }
 }
 
-horizon_mod_sdk::export_mod!(BlockInfo);
+horizon_mod_sdk::export_mod!(Blockscope);
 
 #[cfg(test)]
 mod tests {

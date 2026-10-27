@@ -1,9 +1,11 @@
-# Block Info
+<p align="center"><img src="docs/icon.png" width="128" alt="Blockscope icon"></p>
+
+# Blockscope
 
 A Jade-style block tooltip for [Horizon](https://github.com/ludovic111/horizon): the block under your
 crosshair, its name in your language, its id and how far it is, in a small box beside the crosshair.
 
-![Block Info beside the crosshair](docs/screenshot.png)
+![Blockscope beside the crosshair](docs/screenshot.png)
 
 ## What it shows
 
@@ -31,13 +33,13 @@ Capabilities it asks for: `game-read` (the player and the raycast), `render` (th
 rustup target add wasm32-unknown-unknown
 cargo install --git https://github.com/ludovic111/horizon cargo-horizon-mod
 cargo horizon-mod build
-cargo horizon-mod check target/horizon-mod/block_info.hmod
+cargo horizon-mod check target/horizon-mod/blockscope.hmod
 cargo horizon-mod test
 ```
 
 ## Install
 
-Put `block_info.hmod` in `horizon-mods/` beside `options.txt`, then turn it on in **Options > Mods**.
+Put `blockscope.hmod` in `horizon-mods/` beside `options.txt`, then turn it on in **Options > Mods**.
 
 ## License
 

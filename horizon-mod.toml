@@ -1,0 +1,14 @@
+id = "block_info"
+name = "Block Info"
+version = "0.1.0"
+description = "The block under your crosshair, its name and id beside it. A Jade-style tooltip drawn on the HUD, up to 20 blocks away."
+authors = ["Domanffe"]
+# The Horizon mod API the SDK targets.
+api = "0.1"
+# client: runs in the player's game.
+side = "client"
+# What the mod may do, shown to players before they turn it on:
+# game-read (the player and what the crosshair hits), render (draw on the HUD)
+# and recipes (the item table, for a block's name in the player's language).
+capabilities = ["game-read", "render", "recipes"]
+experimental = ["render", "recipes"]

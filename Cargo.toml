@@ -1,0 +1,14 @@
+[package]
+name = "block-info"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+horizon-mod-sdk = { git = "https://github.com/ludovic111/horizon", rev = "a727f617f045c6d14b96dcaef84c40a6ee51e93a" }
+
+[profile.release]
+opt-level = "s"
+lto = true

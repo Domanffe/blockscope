@@ -8,8 +8,8 @@ you want.
 
 ## What it shows
 
-- The block's name as your game language names it, from the item registry; blocks with no item get
-  their id with the words capitalised ("Water").
+- The block's name as your game language names it, from the block's own name and then the item's;
+  blocks with no item get their id with the words capitalised ("Water").
 - The block id, so a modded block is identifiable.
 - The distance from your feet to the point the crosshair meets the block.
 - The block's icon, drawn by the game's own item renderer.
@@ -17,6 +17,7 @@ you want.
   tool", "this tool harvests it", "Unbreakable").
 - The block's state properties, as the game names them (`facing=north,type=single`).
 - A crop's growth out of the age it ripens at ("Growth 5/7 (71%)").
+- A container's slots, laid out as the container's own screen has them.
 - Its coordinates, on request.
 - A creature instead of a block: its name and its health ("Корова", "10 / 10").
 
@@ -39,33 +40,27 @@ hidden (F1).
 
 The choice is kept between games, in `horizon-mods/.horizon-mod-data/blockscope/`.
 
-**Container contents does not draw yet.** A chest's slots reach the client only when its menu is
-open: the game's client-side `BlockEntity` is made empty with the chunk and updated only by
-`remote_block_entity_data`, which needs an entity it already has. The mod's switch is there for the
-version that reads the integrated server (see below), and shows nothing until then.
+## Native mod (0.5.0)
 
-
-## Native mod (0.4.0)
-
-Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.4.0 is a
+Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.5.0 is a
 native mod made with [horizon-mixins](https://github.com/horizon-rust/horizon-mixins), the bundle
 under `mixins/blockscope/` that hooks the game's own code and is compiled into a build of the game:
 
-- `horizon-mixin.toml`: the two modules and the four hook points (`native_hud`, `native_mods`,
-  `native_settings`, `native_settings_click`).
-- `runtime.rs`: the settings, the rows and where the box goes, with no game types in them, so its
-  tests run without a Horizon build.
-- `glue.rs`: the crosshair hit, the item table and the drawing.
-- `list.rs`, `settings.rs`, `click.rs`, `hud.rs`: the helpers the hook points call.
+- `horizon-mixin.toml`: the two modules and the five hook points (`native_hud`, `native_tick`,
+  `native_mods`, `native_settings`, `native_settings_click`).
+- `runtime.rs`: the settings, the rows, where the box goes, what a crop's age means and how a
+  container's slots lie out, with no game types in them, so its tests run without a Horizon build.
+- `glue.rs`: the crosshair hit, the item table, the container exchange and the drawing.
+- `list.rs`, `settings.rs`, `click.rs`, `hud.rs`, `tick.rs`: the helpers the hook points call.
 
 It reads the block from the game's own raycast and its name, icon, hardness, state and (for a crop)
 its age from the game's tables, so the reach setting works across the whole render distance.
 
-What it still does not show is a container's contents on a server it is not hosting: those slots live
-on the server, and the vanilla protocol sends them only when a menu opens. Jade solves it with its
-server plugin; here the pieces are in one process, so the plan is a hook on the server thread's tick
-that answers the window through a shared cell. On a remote server that stays out of reach without
-changing the protocol.
+A container's slots are the server's: the window asks for the block under the crosshair, and the
+server thread's tick answers with its slots. That works in single player and as a LAN host, where
+both sides are one process. On a server this game is not hosting, the slots never reach it at all:
+the protocol sends a chest's contents only when its menu opens, so a client-side tooltip cannot see
+them without a server plugin of its own.
 
 ## Build
 

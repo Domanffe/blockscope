@@ -7,7 +7,7 @@
 /// and version.
 pub const ID: &str = "blockscope";
 pub const NAME: &str = "Blockscope";
-pub const VERSION: &str = "0.4.0";
+pub const VERSION: &str = "0.5.0";
 pub const DESCRIPTION: &str = "The block under your crosshair: its name, id, distance, icon, hardness, states and a container's contents, with reach, placement and what to show on its own settings page. A Jade-style tooltip for Horizon.";
 
 /// How far the crosshair reaches, in blocks.
@@ -252,6 +252,13 @@ pub fn grid(slots: usize) -> Option<(usize, usize)> {
     Some((columns, slots.div_ceil(columns)))
 }
 
+/// Whether a container's answer (`at`, the block it was read from) is the
+/// block a tooltip is drawing (`pos`, its own id): the same place is enough
+/// for a stale answer to put one container's slots over another block.
+pub fn same_block(at: [i32; 3], answered: &str, pos: [i32; 3], block: &str) -> bool {
+    at == pos && answered == block
+}
+
 /// The box's size: `rows` lines of text, an icon, and a container grid of
 /// `columns` x `rows` cells under them.
 pub fn size(rows: usize, text_w: f32, icon: bool, grid: Option<(usize, usize)>) -> (f32, f32) {
@@ -483,6 +490,21 @@ mod tests {
         assert_eq!((w, h), (46.0, 25.0));
         let (w, h) = size(1, 40.0, true, None);
         assert_eq!((w, h), (64.0, 22.0));
+    }
+
+    #[test]
+    fn an_answer_belongs_to_one_block() {
+        let (at, pos) = ([3, 64, -7], [3, 64, -7]);
+        assert!(same_block(at, "minecraft:chest", pos, "minecraft:chest"));
+        // The same place with another block: a chest emptied into stone.
+        assert!(!same_block(at, "minecraft:chest", pos, "minecraft:stone"));
+        // Another place, same block.
+        assert!(!same_block(
+            at,
+            "minecraft:chest",
+            [3, 64, -6],
+            "minecraft:chest"
+        ));
     }
 
     #[test]

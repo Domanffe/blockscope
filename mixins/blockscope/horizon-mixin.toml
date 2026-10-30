@@ -61,3 +61,12 @@ bindings = [
   { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "batch" },
   { name = "corners", ty = "&mut horizon_client::extras_hud::Corners", value = "corners" },
 ]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

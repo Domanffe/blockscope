@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::{Mutex, MutexGuard};
 
 use horizon_client::containers::BlockEntity;
 use horizon_client::extras_hud::Corners;
@@ -13,6 +14,29 @@ use horizon_client::lang;
 use crate::game::Game;
 use crate::game::native_blockscope as m;
 
+/// A container's slots are the server's: the window asks for the block under
+/// the crosshair here, and the server thread's tick answers with its slots.
+/// The client's own copy of a chest stays empty until its menu opens.
+// shortcut: one ask at a time, so two windows (a host and a guest) overwrite
+// each other's answer and a grid can flicker; key them per window when a LAN
+// host plays with company and it shows.
+static WANTED: Mutex<Option<(String, [i32; 3])>> = Mutex::new(None);
+static ANSWER: Mutex<Option<Grid>> = Mutex::new(None);
+
+/// A container the server answered for: its block, the columns its own screen
+/// shows and its slots.
+#[derive(Clone)]
+struct Grid {
+    pos: [i32; 3],
+    block: String,
+    columns: usize,
+    slots: Vec<Option<ItemStack>>,
+}
+
+fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
+    cell.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[derive(Default)]
 struct State {
     /// Read once, then only what a click writes.
@@ -21,6 +45,8 @@ struct State {
     names: HashMap<String, String>,
     /// The item table was read (a block with no item does not read it again).
     named: bool,
+    /// The last container the server sent for the block under the crosshair.
+    grid: Option<Grid>,
 }
 
 thread_local! {
@@ -50,6 +76,41 @@ pub(super) fn click(game: &Game<'_>, button: usize) {
     with(|s| s.settings = Some(settings));
 }
 
+/// A container's slots and the columns its own screen shows, out of a block
+/// entity: a chest's grid, a furnace's or a brewing stand's three columns.
+fn grid_of(entity: &BlockEntity) -> Option<(Vec<Option<ItemStack>>, usize)> {
+    match entity {
+        BlockEntity::Chest(slots) => {
+            let columns = m::grid(slots.len())?.0;
+            Some((slots.clone(), columns))
+        }
+        BlockEntity::Furnace(furnace) => Some((furnace.items.to_vec(), 3)),
+        BlockEntity::Brewing(stand) => Some((stand.items.to_vec(), 3)),
+        _ => None,
+    }
+}
+
+/// The server thread's tick: the slots of the container the window asked
+/// about. A guest's or a dedicated server's game has no window asking.
+pub(super) fn tick(game: &mut Game<'_>) {
+    if game.native_window() {
+        return;
+    }
+    let Some((block, pos)) = lock(&WANTED).clone() else {
+        return;
+    };
+    let entity = game.world.block_entities.get(&(pos[0], pos[1], pos[2]));
+    let Some((slots, columns)) = entity.and_then(grid_of) else {
+        return;
+    };
+    *lock(&ANSWER) = Some(Grid {
+        pos,
+        block,
+        columns,
+        slots,
+    });
+}
+
 /// What the crosshair is on, read once: the game's own raycast at `reach`.
 struct Pick {
     block: String,
@@ -59,6 +120,7 @@ struct Pick {
     state: String,
     hardness: f32,
     requires_tool: bool,
+    block_entity: bool,
 }
 
 fn hit(game: &Game<'_>, reach: f64) -> Option<Pick> {
@@ -75,6 +137,7 @@ fn hit(game: &Game<'_>, reach: f64) -> Option<Pick> {
         state: game.state_string(state),
         hardness: facts.hardness,
         requires_tool: facts.requires_tool,
+        block_entity: facts.block_entity,
     })
 }
 
@@ -91,6 +154,14 @@ fn name_of(game: &mut Game<'_>, item: &str) -> Option<String> {
             .extend(tables.items.iter().map(|i| (i.id.clone(), i.name.clone())));
     });
     with(|s| s.names.get(item).cloned())
+}
+
+/// The block's own name ("Wheat Crops" where its item is the seeds), else the
+/// item's, else a readable id.
+fn block_name(block: &str, item: Option<String>) -> String {
+    let fallback = item.unwrap_or_else(|| m::pretty(block));
+    let key = format!("block.{}", block.replace(':', "."));
+    lang::get_or(&key, &fallback)
 }
 
 /// The block's item as a stack the game draws its icon from; none for a
@@ -112,32 +183,12 @@ fn creature(game: &Game<'_>) -> Option<(String, f32, f32)> {
         return None;
     };
     let mob = game.mobs.iter().find(|m| m.id as i32 == id)?;
-    let path = mob.kind.id.replace(':', ".");
-    let name = lang::get_or(&format!("entity.{path}"), &m::pretty(&mob.kind.id));
-    Some((name, mob.health, mob.kind.max_health))
-}
-
-/// A container's slots, row by row, with the columns its own screen shows;
-/// none for a block that holds nothing, or holds nothing yet.
-fn container<'a>(game: &'a Game<'_>, pos: [i32; 3]) -> Option<(Vec<Option<&'a ItemStack>>, usize)> {
-    let entity = game.world.block_entities.get(&(pos[0], pos[1], pos[2]))?;
-    let (slots, columns) = match entity {
-        BlockEntity::Chest(slots) => {
-            let columns = m::grid(slots.len())?.0;
-            (
-                slots.iter().map(Option::as_ref).collect::<Vec<_>>(),
-                columns,
-            )
-        }
-        // A furnace's own screen: input, fuel, result.
-        BlockEntity::Furnace(furnace) => (furnace.items.iter().map(Option::as_ref).collect(), 3),
-        BlockEntity::Brewing(stand) => (stand.items.iter().map(Option::as_ref).collect(), 3),
-        _ => return None,
-    };
-    slots
-        .iter()
-        .any(Option::is_some)
-        .then_some((slots, columns))
+    let key = format!("entity.{}", mob.kind.id.replace(':', "."));
+    Some((
+        lang::get_or(&key, &m::pretty(&mob.kind.id)),
+        mob.health,
+        mob.kind.max_health,
+    ))
 }
 
 /// The box: its lines, its icon and a container's slots, wherever the
@@ -148,7 +199,7 @@ fn draw(
     settings: &m::Settings,
     rows: &[(String, u32)],
     icon: Option<&ItemStack>,
-    slots: Option<(&[Option<&ItemStack>], usize)>,
+    slots: Option<(&[Option<ItemStack>], usize)>,
 ) {
     let text_w = rows
         .iter()
@@ -200,7 +251,7 @@ fn draw(
             x + m::PAD + column as f32 * m::CELL,
             top + line as f32 * m::CELL,
         );
-        game.native_fill(batch, [cx, cy, m::CELL, m::CELL], 0x3300_0000);
+        game.native_fill(batch, [cx, cy, m::CELL, m::CELL], 0x6600_0000);
         if let Some(stack) = slot {
             game.draw_item(batch, stack, cx + 1.0, cy + 1.0);
         }
@@ -231,8 +282,34 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
     let Some(pick) = hit(game, settings.reach()) else {
         return;
     };
+    // A container's slots: ask the server thread for this block, and keep its
+    // answer until the crosshair moves to another block.
+    if settings.containers && pick.block_entity {
+        *lock(&WANTED) = Some((pick.block.clone(), pick.pos));
+        let stale = with(|s| {
+            s.grid
+                .as_ref()
+                .is_none_or(|g| !m::same_block(g.pos, &g.block, pick.pos, &pick.block))
+        });
+        if stale {
+            // The clone happens only for an answer about this very block: a
+            // sign or a campfire never gets one, and must not copy the chest's
+            // slots over again every frame.
+            let matched = lock(&ANSWER)
+                .as_ref()
+                .filter(|g| m::same_block(g.pos, &g.block, pick.pos, &pick.block))
+                .cloned();
+            if let Some(grid) = matched {
+                with(|s| s.grid = Some(grid));
+            }
+        }
+    } else {
+        // Nothing to show for a block that holds nothing: drop what a chest
+        // left here, or its slots would hang over stone.
+        with(|s| s.grid = None);
+    }
     let named = name_of(game, &pick.item);
-    let name = named.unwrap_or_else(|| m::pretty(&pick.block));
+    let name = block_name(&pick.block, named);
     let (dx, dy, dz) = (
         pick.point[0] - player.x,
         pick.point[1] - player.y,
@@ -273,18 +350,20 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
         rows.push((format!("Growth {age}/{ripens} ({percent}%)"), m::INK_DIM));
     }
     let stack = settings.icon.then(|| icon(game, &pick.item)).flatten();
-    let slots = settings
-        .containers
-        .then(|| container(game, pick.pos))
-        .flatten();
-    draw(
-        game,
-        batch,
-        &settings,
-        &rows,
-        stack.as_ref(),
-        slots
-            .as_ref()
-            .map(|(slots, columns)| (slots.as_slice(), *columns)),
-    );
+    // shortcut: draw runs inside the State borrow so a container's slots are
+    // not cloned every frame; a with() call inside draw would panic on it.
+    with(|s| {
+        let slots = s.grid.as_ref().filter(|g| {
+            m::same_block(g.pos, &g.block, pick.pos, &pick.block)
+                && g.slots.iter().any(Option::is_some)
+        });
+        draw(
+            game,
+            batch,
+            &settings,
+            &rows,
+            stack.as_ref(),
+            slots.map(|g| (g.slots.as_slice(), g.columns)),
+        );
+    });
 }

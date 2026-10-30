@@ -7,8 +7,8 @@
 /// and version.
 pub const ID: &str = "blockscope";
 pub const NAME: &str = "Blockscope";
-pub const VERSION: &str = "0.5.0";
-pub const DESCRIPTION: &str = "The block under your crosshair: its name, id, distance, icon, hardness, states and a container's contents, with reach, placement and what to show on its own settings page. A Jade-style tooltip for Horizon.";
+pub const VERSION: &str = "0.6.0";
+pub const DESCRIPTION: &str = "The block under your crosshair: its name, id, distance, icon, hardness and the tool it wants, states, a crop's growth and a container's contents, with reach, placement and what to show on its own settings page. A Jade-style tooltip for Horizon.";
 
 /// How far the crosshair reaches, in blocks.
 pub const REACHES: [u32; 4] = [5, 20, 64, 1024];
@@ -26,15 +26,31 @@ pub const OPACITIES: [u8; 4] = [100, 75, 50, 25];
 pub const INK: u32 = 0xFF_FFFF;
 pub const INK_DIM: u32 = 0xA0_A0A0;
 pub const PAD: f32 = 3.0;
+/// A line of text, and the row that carries a 16 px icon beside it.
 pub const LINE: f32 = 10.0;
+pub const ICON_ROW: f32 = 18.0;
 pub const ICON: f32 = 16.0;
 pub const ICON_GAP: f32 = 2.0;
+/// The HUD atlas's own heart, under the key the atlas build gives it.
+pub const HEART: &str = "gui/sprites/hud/heart/full";
+pub const HEART_SIZE: f32 = 9.0;
 /// A container's slot, and the gap under the text above it.
 pub const CELL: f32 = 18.0;
 pub const GRID_GAP: f32 = 2.0;
 /// Clear of the crosshair, and of the screen's edge.
 pub const GAP: f32 = 10.0;
 pub const EDGE: f32 = 2.0;
+
+/// The tool a block asks for, by its mineable tag, and the item whose icon
+/// shows it.
+pub const TOOLS: [(&str, &str); 6] = [
+    ("minecraft:mineable/pickaxe", "minecraft:iron_pickaxe"),
+    ("minecraft:mineable/axe", "minecraft:iron_axe"),
+    ("minecraft:mineable/shovel", "minecraft:iron_shovel"),
+    ("minecraft:mineable/hoe", "minecraft:iron_hoe"),
+    ("minecraft:mineable/shears", "minecraft:shears"),
+    ("minecraft:sword_efficient", "minecraft:iron_sword"),
+];
 
 /// The settings' keys, as the WebAssembly mod wrote them.
 const KEYS: [&str; 10] = [
@@ -221,6 +237,13 @@ pub fn growth(block: &str, properties: &str) -> Option<(u32, u32)> {
     Some((age(properties)?, *max))
 }
 
+/// The tool a block asks for, out of `TOOLS`: `carries` answers whether the
+/// block is in a mineable tag.
+pub fn tool(carries: impl Fn(&str) -> bool) -> Option<&'static str> {
+    let (_, tool) = TOOLS.iter().find(|(tag, _)| carries(tag))?;
+    Some(tool)
+}
+
 /// The hardness and the tool, as Jade's line: an unbreakable block, one that
 /// asks for the right tool, and whether what the player holds is one.
 pub fn harvest(hardness: f32, requires_tool: bool, correct: bool) -> String {
@@ -259,20 +282,14 @@ pub fn same_block(at: [i32; 3], answered: &str, pos: [i32; 3], block: &str) -> b
     at == pos && answered == block
 }
 
-/// The box's size: `rows` lines of text, an icon, and a container grid of
-/// `columns` x `rows` cells under them.
-pub fn size(rows: usize, text_w: f32, icon: bool, grid: Option<(usize, usize)>) -> (f32, f32) {
-    let offset = if icon { ICON + ICON_GAP } else { 0.0 };
-    let lines_h = if rows == 0 {
-        0.0
-    } else {
-        (rows - 1) as f32 * LINE + 9.0
-    };
-    let text_h = lines_h.max(if icon { ICON } else { 0.0 });
+/// The box's size: rows of these heights (a line, or a row with an icon),
+/// and a container grid of `columns` x `rows` cells under them.
+pub fn size(heights: &[f32], text_w: f32, grid: Option<(usize, usize)>) -> (f32, f32) {
+    let text_h: f32 = heights.iter().sum();
     let (grid_w, grid_h) = grid.map_or((0.0, 0.0), |(columns, rows)| {
         (columns as f32 * CELL, rows as f32 * CELL + GRID_GAP)
     });
-    let w = (PAD * 2.0 + offset + text_w).max(PAD * 2.0 + grid_w);
+    let w = (PAD * 2.0 + text_w).max(PAD * 2.0 + grid_w);
     (w, PAD * 2.0 + text_h + grid_h)
 }
 
@@ -476,20 +493,27 @@ mod tests {
     }
 
     #[test]
+    fn the_icon_is_the_tool_the_block_asks_for() {
+        // Stone is mined with a pickaxe, logs with an axe.
+        let stone = |tag: &str| tag == "minecraft:mineable/pickaxe";
+        assert_eq!(tool(stone), Some("minecraft:iron_pickaxe"));
+        let log = |tag: &str| tag == "minecraft:mineable/axe";
+        assert_eq!(tool(log), Some("minecraft:iron_axe"));
+        let shears = |tag: &str| tag == "minecraft:mineable/shears";
+        assert_eq!(tool(shears), Some("minecraft:shears"));
+        // A block in no mineable tag (glass, cake) has no tool at all.
+        assert_eq!(tool(|_| false), None);
+        // Two tags at once: the pickaxe wins, as it comes first in TOOLS.
+        assert_eq!(tool(|_| true), Some("minecraft:iron_pickaxe"));
+    }
+
+    #[test]
     fn a_containers_slots_lie_out_as_its_own_screen() {
         assert_eq!(grid(27), Some((9, 3)), "a chest");
         assert_eq!(grid(5), Some((5, 1)), "a hopper");
         assert_eq!(grid(9), Some((3, 3)), "a dispenser");
         assert_eq!(grid(3), Some((3, 1)), "a furnace");
         assert_eq!(grid(0), None);
-    }
-
-    #[test]
-    fn a_line_of_text_sets_the_box_height() {
-        let (w, h) = size(2, 40.0, false, None);
-        assert_eq!((w, h), (46.0, 25.0));
-        let (w, h) = size(1, 40.0, true, None);
-        assert_eq!((w, h), (64.0, 22.0));
     }
 
     #[test]
@@ -508,10 +532,21 @@ mod tests {
     }
 
     #[test]
+    fn a_line_of_text_sets_the_box_height() {
+        let (w, h) = size(&[LINE, LINE], 40.0, None);
+        assert_eq!((w, h), (46.0, 26.0));
+        // A row with an icon is taller than a line.
+        let (w, h) = size(&[ICON_ROW], 40.0, None);
+        assert_eq!((w, h), (46.0, 24.0));
+    }
+
+    #[test]
     fn a_container_grid_widens_the_box() {
-        let (w, h) = size(3, 40.0, true, Some((9, 3)));
+        let (w, h) = size(&[ICON_ROW, LINE, LINE], 40.0, Some((9, 3)));
         assert_eq!(w, PAD * 2.0 + 9.0 * CELL, "nine cells wide, no wider");
-        // Three lines of text are taller than the icon, so they set its top.
-        assert_eq!(h, PAD * 2.0 + 2.0 * LINE + 9.0 + 3.0 * CELL + GRID_GAP);
+        assert_eq!(
+            h,
+            PAD * 2.0 + ICON_ROW + LINE + LINE + 3.0 * CELL + GRID_GAP
+        );
     }
 }

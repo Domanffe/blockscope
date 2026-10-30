@@ -12,7 +12,9 @@ you want.
   blocks with no item get their id with the words capitalised ("Water").
 - The block id, so a modded block is identifiable.
 - The distance from your feet to the point the crosshair meets the block.
-- The block's icon, drawn by the game's own item renderer.
+- The block's icon beside its name, on its own row, drawn by the game's own item renderer.
+- The tool the block wants beside its hardness, as that tool's own icon (a grey pickaxe for stone);
+  the heart of the HUD beside a creature's health.
 - Its hardness, and whether what you hold is the tool it wants ("Hardness 3.0 · needs the right
   tool", "this tool harvests it", "Unbreakable").
 - The block's state properties, as the game names them (`facing=north,type=single`).
@@ -40,9 +42,9 @@ hidden (F1).
 
 The choice is kept between games, in `horizon-mods/.horizon-mod-data/blockscope/`.
 
-## Native mod (0.5.0)
+## Native mod (0.6.0)
 
-Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.5.0 is a
+Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.6.0 is a
 native mod made with [horizon-mixins](https://github.com/horizon-rust/horizon-mixins), the bundle
 under `mixins/blockscope/` that hooks the game's own code and is compiled into a build of the game:
 

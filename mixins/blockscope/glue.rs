@@ -37,6 +37,50 @@ fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
     cell.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// What a row of the box may carry beside its text: an item, drawn by the
+/// game's own renderer, or a sprite of the HUD's atlas (the heart).
+enum Icon {
+    Item(ItemStack),
+    Sprite(&'static str),
+}
+
+/// One row of the box: a line of text, with an icon when it has one.
+struct Row {
+    text: String,
+    ink: u32,
+    icon: Option<Icon>,
+}
+
+impl Row {
+    fn text(text: impl Into<String>, ink: u32) -> Self {
+        Self {
+            text: text.into(),
+            ink,
+            icon: None,
+        }
+    }
+    fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+    /// Taller than a line when it carries an icon.
+    fn height(&self) -> f32 {
+        if self.icon.is_some() {
+            m::ICON_ROW
+        } else {
+            m::LINE
+        }
+    }
+    /// Where its text starts, clear of the icon.
+    fn offset(&self) -> f32 {
+        if self.icon.is_some() {
+            m::ICON + m::ICON_GAP
+        } else {
+            0.0
+        }
+    }
+}
+
 #[derive(Default)]
 struct State {
     /// Read once, then only what a click writes.
@@ -164,9 +208,9 @@ fn block_name(block: &str, item: Option<String>) -> String {
     lang::get_or(&key, &fallback)
 }
 
-/// The block's item as a stack the game draws its icon from; none for a
-/// block the item registry has no item for.
-fn icon(game: &Game<'_>, item: &str) -> Option<ItemStack> {
+/// An item of the game's registry as a stack, for its icon; none for an id
+/// the item registry does not know.
+fn stack(game: &Game<'_>, item: &str) -> Option<ItemStack> {
     game.res.items().get(item)?;
     Some(ItemStack {
         item: item.into(),
@@ -191,25 +235,24 @@ fn creature(game: &Game<'_>) -> Option<(String, f32, f32)> {
     ))
 }
 
-/// The box: its lines, its icon and a container's slots, wherever the
+/// The box: its rows, their icons and a container's slots, wherever the
 /// settings put it.
 fn draw(
     game: &Game<'_>,
     batch: &mut HudBatch,
     settings: &m::Settings,
-    rows: &[(String, u32)],
-    icon: Option<&ItemStack>,
+    rows: &[Row],
     slots: Option<(&[Option<ItemStack>], usize)>,
 ) {
     let text_w = rows
         .iter()
-        .map(|(text, _)| HudBatch::text_width(&game.gui.atlas, text))
+        .map(|row| row.offset() + HudBatch::text_width(&game.gui.atlas, &row.text))
         .fold(0.0f32, f32::max);
+    let heights: Vec<f32> = rows.iter().map(Row::height).collect();
     let cells = slots.map(|(slots, columns)| (slots, columns, slots.len().div_ceil(columns)));
     let (w, h) = m::size(
-        rows.len(),
+        &heights,
         text_w,
-        icon.is_some(),
         cells.map(|(_, columns, lines)| (columns, lines)),
     );
     let (x, y) = m::place(w, h, batch.width, batch.height, settings.place);
@@ -218,38 +261,47 @@ fn draw(
         [x, y, w, h],
         m::alpha(m::OPACITIES[settings.opacity]),
     );
-    let offset = if icon.is_some() {
-        m::ICON + m::ICON_GAP
-    } else {
-        0.0
-    };
-    if let Some(stack) = icon {
-        game.draw_item(batch, stack, x + m::PAD, y + m::PAD);
-    }
-    for (i, (text, ink)) in rows.iter().enumerate() {
+    let mut line = y + m::PAD;
+    for row in rows {
+        if let Some(icon) = &row.icon {
+            match icon {
+                Icon::Item(item) => {
+                    let top = line + (row.height() - m::ICON) / 2.0;
+                    game.draw_item(batch, item, x + m::PAD, top);
+                }
+                Icon::Sprite(name) => {
+                    let top = line + (row.height() - m::HEART_SIZE) / 2.0;
+                    batch.sprite_scaled(
+                        &game.gui.atlas,
+                        name,
+                        x + m::PAD,
+                        top,
+                        m::HEART_SIZE,
+                        m::HEART_SIZE,
+                        u32::MAX,
+                    );
+                }
+            }
+        }
+        let top = line + (row.height() - 9.0) / 2.0;
         game.native_text(
             batch,
-            text,
-            [x + m::PAD + offset, y + m::PAD + i as f32 * m::LINE],
-            *ink,
+            &row.text,
+            [x + m::PAD + row.offset(), top],
+            row.ink,
             true,
         );
+        line += row.height();
     }
     let Some((slots, columns, _)) = cells else {
         return;
     };
-    let lines_h = if rows.is_empty() {
-        0.0
-    } else {
-        (rows.len() - 1) as f32 * m::LINE + 9.0
-    };
-    let text_h = lines_h.max(if icon.is_some() { m::ICON } else { 0.0 });
-    let top = y + m::PAD + text_h + m::GRID_GAP;
+    let top = line + m::GRID_GAP;
     for (i, slot) in slots.iter().enumerate() {
-        let (column, line) = (i % columns, i / columns);
+        let (column, row) = (i % columns, i / columns);
         let (cx, cy) = (
             x + m::PAD + column as f32 * m::CELL,
-            top + line as f32 * m::CELL,
+            top + row as f32 * m::CELL,
         );
         game.native_fill(batch, [cx, cy, m::CELL, m::CELL], 0x6600_0000);
         if let Some(stack) = slot {
@@ -269,11 +321,12 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
     if settings.entities
         && let Some((name, health, max_health)) = creature(game)
     {
-        let rows = vec![
-            (name, m::INK),
-            (format!("{health:.0} / {max_health:.0}"), m::INK_DIM),
+        let rows = [
+            Row::text(name, m::INK),
+            Row::text(format!("{health:.0} / {max_health:.0}"), m::INK_DIM)
+                .icon(Icon::Sprite(m::HEART)),
         ];
-        draw(game, batch, &settings, &rows, None, None);
+        draw(game, batch, &settings, &rows, None);
         return;
     }
     let Some(player) = game.native_player() else {
@@ -315,41 +368,58 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
         pick.point[1] - player.y,
         pick.point[2] - player.z,
     );
-    let mut rows = vec![
-        (name, m::INK),
-        (
-            format!(
-                "{} {:.1} m",
-                pick.block,
-                (dx * dx + dy * dy + dz * dz).sqrt()
-            ),
-            m::INK_DIM,
+    let icon = settings.icon.then(|| stack(game, &pick.item)).flatten();
+    let mut rows = vec![match icon {
+        Some(item) => Row::text(name, m::INK).icon(Icon::Item(item)),
+        None => Row::text(name, m::INK),
+    }];
+    rows.push(Row::text(
+        format!(
+            "{} {:.1} m",
+            pick.block,
+            (dx * dx + dy * dy + dz * dz).sqrt()
         ),
-    ];
+        m::INK_DIM,
+    ));
     let properties = m::properties(&pick.state);
     if settings.coords {
         let [x, y, z] = pick.pos;
-        rows.push((format!("{x} {y} {z}"), m::INK_DIM));
+        rows.push(Row::text(format!("{x} {y} {z}"), m::INK_DIM));
     }
     if settings.harvest {
         let correct = game.res.items().correct_for_drops(game.held(), &pick.block);
-        rows.push((
+        let mut row = Row::text(
             m::harvest(pick.hardness, pick.requires_tool, correct),
             m::INK_DIM,
-        ));
+        );
+        if pick.requires_tool {
+            let tag = |name: &str| {
+                game.res
+                    .items()
+                    .block_tags
+                    .get(name)
+                    .is_some_and(|blocks| blocks.contains(&pick.block))
+            };
+            if let Some(tool) = m::tool(tag).and_then(|id| stack(game, id)) {
+                row = row.icon(Icon::Item(tool));
+            }
+        }
+        rows.push(row);
     }
     if settings.states
         && let Some(properties) = properties
     {
-        rows.push((format!("State: {properties}"), m::INK_DIM));
+        rows.push(Row::text(format!("State: {properties}"), m::INK_DIM));
     }
     if settings.growth
         && let Some((age, ripens)) = properties.and_then(|p| m::growth(&pick.block, p))
     {
         let percent = age * 100 / ripens.max(1);
-        rows.push((format!("Growth {age}/{ripens} ({percent}%)"), m::INK_DIM));
+        rows.push(Row::text(
+            format!("Growth {age}/{ripens} ({percent}%)"),
+            m::INK_DIM,
+        ));
     }
-    let stack = settings.icon.then(|| icon(game, &pick.item)).flatten();
     // shortcut: draw runs inside the State borrow so a container's slots are
     // not cloned every frame; a with() call inside draw would panic on it.
     with(|s| {
@@ -362,7 +432,6 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
             batch,
             &settings,
             &rows,
-            stack.as_ref(),
             slots.map(|g| (g.slots.as_slice(), g.columns)),
         );
     });

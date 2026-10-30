@@ -33,6 +33,14 @@ struct Grid {
     slots: Vec<Option<ItemStack>>,
 }
 
+impl Grid {
+    /// Whether this answer is about the block `pick` is looking at: a stale
+    /// one must not put a chest's slots over whatever replaced it.
+    fn about(&self, pick: &Pick) -> bool {
+        m::same_block(self.pos, &self.block, pick.pos, &pick.block)
+    }
+}
+
 fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
     cell.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -187,9 +195,8 @@ fn hit(game: &Game<'_>, reach: f64) -> Option<Pick> {
 
 /// The name the player's language gives `item`, from the game's item table.
 fn name_of(game: &mut Game<'_>, item: &str) -> Option<String> {
-    let known = with(|s| (s.named, s.names.get(item).cloned()));
-    if let (true, name) = known {
-        return name;
+    if with(|s| s.named) {
+        return with(|s| s.names.get(item).cloned());
     }
     let tables = game.native_recipes()?;
     with(|s| {
@@ -296,12 +303,12 @@ fn draw(
     let Some((slots, columns, _)) = cells else {
         return;
     };
-    let top = line + m::GRID_GAP;
+    let grid_top = line + m::GRID_GAP;
     for (i, slot) in slots.iter().enumerate() {
         let (column, row) = (i % columns, i / columns);
         let (cx, cy) = (
             x + m::PAD + column as f32 * m::CELL,
-            top + row as f32 * m::CELL,
+            grid_top + row as f32 * m::CELL,
         );
         game.native_fill(batch, [cx, cy, m::CELL, m::CELL], 0x6600_0000);
         if let Some(stack) = slot {
@@ -339,19 +346,12 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
     // answer until the crosshair moves to another block.
     if settings.containers && pick.block_entity {
         *lock(&WANTED) = Some((pick.block.clone(), pick.pos));
-        let stale = with(|s| {
-            s.grid
-                .as_ref()
-                .is_none_or(|g| !m::same_block(g.pos, &g.block, pick.pos, &pick.block))
-        });
+        let stale = with(|s| !s.grid.as_ref().is_some_and(|g| g.about(&pick)));
         if stale {
             // The clone happens only for an answer about this very block: a
             // sign or a campfire never gets one, and must not copy the chest's
             // slots over again every frame.
-            let matched = lock(&ANSWER)
-                .as_ref()
-                .filter(|g| m::same_block(g.pos, &g.block, pick.pos, &pick.block))
-                .cloned();
+            let matched = lock(&ANSWER).as_ref().filter(|g| g.about(&pick)).cloned();
             if let Some(grid) = matched {
                 with(|s| s.grid = Some(grid));
             }
@@ -368,7 +368,11 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
         pick.point[1] - player.y,
         pick.point[2] - player.z,
     );
-    let icon = settings.icon.then(|| stack(game, &pick.item)).flatten();
+    let icon = if settings.icon {
+        stack(game, &pick.item)
+    } else {
+        None
+    };
     let mut rows = vec![match icon {
         Some(item) => Row::text(name, m::INK).icon(Icon::Item(item)),
         None => Row::text(name, m::INK),
@@ -423,10 +427,10 @@ pub(super) fn hud(game: &mut Game<'_>, batch: &mut HudBatch, corners: &mut Corne
     // shortcut: draw runs inside the State borrow so a container's slots are
     // not cloned every frame; a with() call inside draw would panic on it.
     with(|s| {
-        let slots = s.grid.as_ref().filter(|g| {
-            m::same_block(g.pos, &g.block, pick.pos, &pick.block)
-                && g.slots.iter().any(Option::is_some)
-        });
+        let slots = s
+            .grid
+            .as_ref()
+            .filter(|g| g.about(&pick) && g.slots.iter().any(Option::is_some));
         draw(
             game,
             batch,

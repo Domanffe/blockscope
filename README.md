@@ -42,9 +42,9 @@ hidden (F1).
 
 The choice is kept between games, in `horizon-mods/.horizon-mod-data/blockscope/`.
 
-## Native mod (0.6.0)
+## Native mod (0.3.0)
 
-Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.6.0 is a
+Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.3.0 is a
 native mod made with [horizon-mixins](https://github.com/horizon-rust/horizon-mixins), the bundle
 under `mixins/blockscope/` that hooks the game's own code and is compiled into a build of the game:
 

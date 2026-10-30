@@ -7,7 +7,7 @@
 /// and version.
 pub const ID: &str = "blockscope";
 pub const NAME: &str = "Blockscope";
-pub const VERSION: &str = "0.6.0";
+pub const VERSION: &str = "0.3.0";
 pub const DESCRIPTION: &str = "The block under your crosshair: its name, id, distance, icon, hardness and the tool it wants, states, a crop's growth and a container's contents, with reach, placement and what to show on its own settings page. A Jade-style tooltip for Horizon.";
 
 /// How far the crosshair reaches, in blocks.

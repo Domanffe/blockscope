@@ -13,7 +13,12 @@ you want.
 - The block id, so a modded block is identifiable.
 - The distance from your feet to the point the crosshair meets the block.
 - The block's icon, drawn by the game's own item renderer.
+- Its hardness, and whether what you hold is the tool it wants ("Hardness 3.0 · needs the right
+  tool", "this tool harvests it", "Unbreakable").
+- The block's state properties, as the game names them (`facing=north,type=single`).
+- A crop's growth out of the age it ripens at ("Growth 5/7 (71%)").
 - Its coordinates, on request.
+- A creature instead of a block: its name and its health ("Корова", "10 / 10").
 
 Nothing is drawn when you look at no block within reach, while a screen is open, or with the HUD
 hidden (F1).
@@ -29,12 +34,20 @@ hidden (F1).
 - **Background**: 100, 75, 50 or 25% opaque.
 - **Coordinates**: on or off.
 - **Item icon**: on or off.
+- **Hardness and tool**, **Block states**, **Crop growth**, **Container contents**, **Creatures**:
+  each line on or off.
 
 The choice is kept between games, in `horizon-mods/.horizon-mod-data/blockscope/`.
 
-## Native mod (0.3.0)
+**Container contents does not draw yet.** A chest's slots reach the client only when its menu is
+open: the game's client-side `BlockEntity` is made empty with the chunk and updated only by
+`remote_block_entity_data`, which needs an entity it already has. The mod's switch is there for the
+version that reads the integrated server (see below), and shows nothing until then.
 
-Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.3.0 is a
+
+## Native mod (0.4.0)
+
+Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.4.0 is a
 native mod made with [horizon-mixins](https://github.com/horizon-rust/horizon-mixins), the bundle
 under `mixins/blockscope/` that hooks the game's own code and is compiled into a build of the game:
 
@@ -45,10 +58,14 @@ under `mixins/blockscope/` that hooks the game's own code and is compiled into a
 - `glue.rs`: the crosshair hit, the item table and the drawing.
 - `list.rs`, `settings.rs`, `click.rs`, `hud.rs`: the helpers the hook points call.
 
-It reads the block from the game's own raycast and its name and icon from the game's item table, so
-the reach setting works across the whole render distance. What it still does not show is block
-hardness, the right tool, block states, container contents and entities: those want more than a
-name, an id and a distance.
+It reads the block from the game's own raycast and its name, icon, hardness, state and (for a crop)
+its age from the game's tables, so the reach setting works across the whole render distance.
+
+What it still does not show is a container's contents on a server it is not hosting: those slots live
+on the server, and the vanilla protocol sends them only when a menu opens. Jade solves it with its
+server plugin; here the pieces are in one process, so the plan is a hook on the server thread's tick
+that answers the window through a shared cell. On a remote server that stays out of reach without
+changing the protocol.
 
 ## Build
 

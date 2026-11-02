@@ -1,12 +1,12 @@
 [mod]
 id = "blockscope"
-version = "0.3.0"
+version = "0.3.1"
 priority = 100
 
 # The commit it was tested on. It uses only the native hook points (hooks 2
 # in horizon-native.json): the launcher builds it on any Horizon that has them.
 [compatibility]
-horizon_revision = "a46ce6898bd72016e061aaec1afc1375b384deac"
+horizon_revision = "4aa6854a886183440256f4f4a4a9d1ed853227a1"
 
 [[module]]
 id = "runtime"
@@ -23,7 +23,8 @@ source = "glue.rs"
 [[injection]]
 id = "list"
 kind = "HEAD"
-target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+hook = "mods"
+hook_version = 1
 helper = "list.rs"
 bindings = [
   { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
@@ -32,7 +33,8 @@ bindings = [
 [[injection]]
 id = "settings"
 kind = "HEAD"
-target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+hook = "settings"
+hook_version = 1
 helper = "settings.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
@@ -43,7 +45,8 @@ bindings = [
 [[injection]]
 id = "click"
 kind = "HEAD"
-target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+hook = "settings_click"
+hook_version = 1
 helper = "click.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
@@ -54,7 +57,8 @@ bindings = [
 [[injection]]
 id = "hud"
 kind = "HEAD"
-target = "horizon_client::game::native_hooks::Game<'_>::native_hud"
+hook = "hud"
+hook_version = 1
 helper = "hud.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
@@ -65,7 +69,8 @@ bindings = [
 [[injection]]
 id = "tick"
 kind = "HEAD"
-target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+hook = "tick"
+hook_version = 1
 helper = "tick.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },

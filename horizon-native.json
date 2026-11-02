@@ -1,9 +1,9 @@
 {
   "game": "26.3",
   "hooks": 2,
-  "horizon": "a46ce6898bd72016e061aaec1afc1375b384deac",
+  "horizon": "4aa6854a886183440256f4f4a4a9d1ed853227a1",
   "id": "blockscope",
-  "mixins": "3f99a5c60dfa311cc365524c44ae2fd799bfa1de",
+  "mixins": "a2af5c0dd4117d51ecd70066ba7a00b4a2c10dab",
   "schema": 1,
-  "version": "0.3.0"
+  "version": "0.3.1"
 }

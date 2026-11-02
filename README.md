@@ -42,14 +42,14 @@ hidden (F1).
 
 The choice is kept between games, in `horizon-mods/.horizon-mod-data/blockscope/`.
 
-## Native mod (0.3.0)
+## Native mod (0.3.1)
 
-Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.3.0 is a
+Horizon's WebAssembly mod API is gone: `blockscope.hmod` (0.2.0) does not run any more. 0.3.1 is a
 native mod made with [horizon-mixins](https://github.com/horizon-rust/horizon-mixins), the bundle
 under `mixins/blockscope/` that hooks the game's own code and is compiled into a build of the game:
 
-- `horizon-mixin.toml`: the two modules and the five hook points (`native_hud`, `native_tick`,
-  `native_mods`, `native_settings`, `native_settings_click`).
+- `horizon-mixin.toml`: the two modules and the five hook points by name (`mods`, `settings`,
+  `settings_click`, `hud`, `tick`).
 - `runtime.rs`: the settings, the rows, where the box goes, what a crop's age means and how a
   container's slots lie out, with no game types in them, so its tests run without a Horizon build.
 - `glue.rs`: the crosshair hit, the item table, the container exchange and the drawing.
